@@ -852,10 +852,37 @@ class UniversalITRApp(tk.Tk):
         self._q: "queue.Queue[tuple]" = queue.Queue()
         self._preview_thread: Optional[threading.Thread] = None
         self._preview_q: "queue.Queue[tuple]" = queue.Queue()
+        self._presets_window: Optional[tk.Toplevel] = None
 
         self._build_ui()
+        self._build_presets_window()
         self._load_initial_preset()
         self._update_main_preset_status()
+
+    def _build_presets_window(self):
+        win = tk.Toplevel(self)
+        win.title("预设管理")
+        win.geometry("1380x860")
+        win.withdraw()
+
+        def on_close():
+            win.withdraw()
+
+        win.protocol("WM_DELETE_WINDOW", on_close)
+        self._build_presets_ui(win)
+        self._presets_window = win
+
+    def open_presets_window(self):
+        if self._presets_window and self._presets_window.winfo_exists():
+            self._presets_window.deiconify()
+            self._presets_window.lift()
+            self._presets_window.focus_force()
+        else:
+            self._build_presets_window()
+            if self._presets_window:
+                self._presets_window.deiconify()
+                self._presets_window.lift()
+                self._presets_window.focus_force()
 
     def open_pdf_test_folder(self):
         path = OUTPUT_TEST_ROOT
@@ -878,18 +905,13 @@ class UniversalITRApp(tk.Tk):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True)
 
-        self.tab_presets = ttk.Frame(self.notebook)
         self.tab_main = ttk.Frame(self.notebook)
 
-        self.notebook.add(self.tab_presets, text="预设管理")
-        self.notebook.add(self.tab_main, text="主界面")
-
-        self._build_presets_tab()
+        self.notebook.add(self.tab_main, text="表头填写")
         self._build_main_tab()
 
     # ------------------ Presets Tab ------------------
-    def _build_presets_tab(self):
-        root = self.tab_presets
+    def _build_presets_ui(self, root):
         pan = tk.PanedWindow(root, orient=tk.HORIZONTAL, sashwidth=12, sashrelief=tk.RAISED, bd=1, relief=tk.GROOVE)
         pan.pack(fill="both", expand=True, padx=10, pady=10)
 
@@ -1040,7 +1062,7 @@ ITR PDF 自动预填工具 —— 使用说明
    - 【表头归一化】为兼容不同台账列名写法，程序会将表头归一化为：转大写 + 删除非字母数字字符
      例：Tag No. -> TAGNO；Equipment Tag -> EQUIPMENTTAG；Temp Class -> TEMPCLASS
 4）配置匹配键（Match Key）：定义如何从 PDF 提取 Tag/设备编号，并用它去匹配 Excel 行
-   - 【匹配键归一化】匹配时会对键值做：去空格 + 转大写，因此类似 627-30-SKT-01-Ex / 627-30-SKT-01 的差异可过候选规则匹配
+   - 【匹配键归一化】匹配时会对键值做：去空格 + 转大写，因此类似 627-30-SKT-01-Ex / 627-30-SKT-01 的差异可通过候选规则匹配
 5）配置 ITR 拆分规则：填写“每套 ITR 页数（itr_pages_per_set）”
 6）配置字段映射：定义 PDF 中每个字段来源（Excel / 手动 / 常量 / 规则）
 7）先做一次【PDF 定位测试（画框）】人工确认定位是否正确
@@ -1431,7 +1453,7 @@ ITR PDF 自动预填工具 —— 使用说明
         top.pack(fill="x", padx=10, pady=10)
         self.lbl_active = ttk.Label(top, text="当前预设：未设置")
         self.lbl_active.pack(side="left")
-        ttk.Button(top, text="打开预设管理", command=lambda: self.notebook.select(self.tab_presets)).pack(side="right")
+        ttk.Button(top, text="打开预设管理", command=self.open_presets_window).pack(side="right")
 
         filebar = ttk.Frame(root);
         filebar.pack(fill="x", padx=10, pady=(0, 10))
