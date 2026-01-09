@@ -4,11 +4,11 @@
 # 依赖：pip install pymupdf pandas openpyxl
 #
 # 目录说明（脚本同目录自动生成）：
-# - presets/          预设文件（.json）
-# - output/           导出结果（filled PDF + report.xlsx）
-# - pdf_test/         PDF 定位测试结果（蓝框label 红框cell）
-# - match_memory.json 模糊匹配记忆库（短Key -> ExcelKey）
-# - config_global.json 当前使用预设名
+# - presets/                预设文件（.json）
+# - output/itr_autofill/     导出结果（filled PDF + 测试PDF）
+# - report/itr_autofill/     报告输出（report.xlsx）
+# - match_memory.json       模糊匹配记忆库（短Key -> ExcelKey）
+# - config_global.json      当前使用预设名
 # ============================================================
 
 import os
@@ -36,14 +36,21 @@ APP_VERSION = "V1.0.3"
 BASE_DIR = os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else os.path.dirname(
     os.path.abspath(__file__))
 PRESETS_DIR = os.path.join(BASE_DIR, "presets")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
-PDF_TEST_DIR = os.path.join(BASE_DIR, "pdf_test")
+OUTPUT_ROOT = os.path.join(BASE_DIR, "output")
+MODULE_NAME = "itr_autofill"
+OUTPUT_MODULE_DIR = os.path.join(OUTPUT_ROOT, MODULE_NAME)
+OUTPUT_TEST_ROOT = os.path.join(OUTPUT_MODULE_DIR, "test")
+OUTPUT_FILLED_ROOT = os.path.join(OUTPUT_MODULE_DIR, "filled")
+REPORT_ROOT = os.path.join(BASE_DIR, "report")
+REPORT_MODULE_NAME = "itr_autofill"
 GLOBAL_CONFIG_PATH = os.path.join(BASE_DIR, "config_global.json")
 MATCH_MEMORY_PATH = os.path.join(BASE_DIR, "match_memory.json")
 
 os.makedirs(PRESETS_DIR, exist_ok=True)
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-os.makedirs(PDF_TEST_DIR, exist_ok=True)
+os.makedirs(OUTPUT_MODULE_DIR, exist_ok=True)
+os.makedirs(OUTPUT_TEST_ROOT, exist_ok=True)
+os.makedirs(OUTPUT_FILLED_ROOT, exist_ok=True)
+os.makedirs(os.path.join(REPORT_ROOT, REPORT_MODULE_NAME), exist_ok=True)
 
 DEFAULT_PAGE1_MARK_RE = re.compile(r"Page\s*1\s*of\s*(\d+)", re.IGNORECASE)
 DEFAULT_TAG_RE = re.compile(r"TAG\s*NO\.\s*:\s*([A-Za-z0-9\-\._/]+)", re.IGNORECASE)
@@ -59,6 +66,22 @@ def now_iso() -> str:
 
 def today_ymd() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d")
+
+
+def batch_id() -> str:
+    return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def ensure_output_batch_dir(output_type: str, batch: str) -> str:
+    path = os.path.join(OUTPUT_MODULE_DIR, output_type, batch)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def ensure_report_batch_dir(batch: str) -> str:
+    path = os.path.join(REPORT_ROOT, REPORT_MODULE_NAME, batch)
+    os.makedirs(path, exist_ok=True)
+    return path
 
 
 def load_json_safe(path: str, default):
@@ -701,13 +724,15 @@ def pdf_position_test(pdf_path: str, preset: dict, fields: List[dict]) -> Tuple[
             logs.append(f"[OK] {name} (p{rel_i})")
 
     base = os.path.basename(pdf_path)
-    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = batch_id()
     out_name = f"{os.path.splitext(base)[0]}__test_{preset.get('preset_name', 'preset')}__{ts}.pdf"
-    out_path = os.path.join(PDF_TEST_DIR, out_name)
+    batch_dir = os.path.join(OUTPUT_TEST_ROOT, ts)
+    os.makedirs(batch_dir, exist_ok=True)
+    out_path = os.path.join(batch_dir, out_name)
     doc.save(out_path)
     doc.close()
 
-    log_path = os.path.join(PDF_TEST_DIR, f"{os.path.splitext(out_name)[0]}.txt")
+    log_path = os.path.join(batch_dir, f"{os.path.splitext(out_name)[0]}.txt")
     with open(log_path, "w", encoding="utf-8") as f:
         f.write(f"Preset: {preset.get('preset_name', '')}\nPDF: {base}\nTime: {now_iso()}\n\n")
         for line in logs:
@@ -833,7 +858,7 @@ class UniversalITRApp(tk.Tk):
         self._update_main_preset_status()
 
     def open_pdf_test_folder(self):
-        path = PDF_TEST_DIR
+        path = OUTPUT_TEST_ROOT
         os.makedirs(path, exist_ok=True)
         try:
             os.startfile(path)
@@ -841,7 +866,7 @@ class UniversalITRApp(tk.Tk):
             messagebox.showerror("错误", f"无法打开测试文件夹: {e}")
 
     def open_output_folder(self):
-        path = OUTPUT_DIR
+        path = OUTPUT_MODULE_DIR
         os.makedirs(path, exist_ok=True)
         try:
             os.startfile(path)
@@ -1015,7 +1040,7 @@ ITR PDF 自动预填工具 —— 使用说明
    - 【表头归一化】为兼容不同台账列名写法，程序会将表头归一化为：转大写 + 删除非字母数字字符
      例：Tag No. -> TAGNO；Equipment Tag -> EQUIPMENTTAG；Temp Class -> TEMPCLASS
 4）配置匹配键（Match Key）：定义如何从 PDF 提取 Tag/设备编号，并用它去匹配 Excel 行
-   - 【匹配键归一化】匹配时会对键值做：去空格 + 转大写，因此类似 627-30-SKT-01-Ex / 627-30-SKT-01 的差异可通过候选规则匹配
+   - 【匹配键归一化】匹配时会对键值做：去空格 + 转大写，因此类似 627-30-SKT-01-Ex / 627-30-SKT-01 的差异可过候选规则匹配
 5）配置 ITR 拆分规则：填写“每套 ITR 页数（itr_pages_per_set）”
 6）配置字段映射：定义 PDF 中每个字段来源（Excel / 手动 / 常量 / 规则）
 7）先做一次【PDF 定位测试（画框）】人工确认定位是否正确
@@ -1058,7 +1083,7 @@ ITR PDF 自动预填工具 —— 使用说明
 --------------------------------
 六、PDF 定位测试（画框）
 --------------------------------
-点击“PDF 定位测试（画框）”后，会在 pdf_test 文件夹中生成带标记的测试 PDF：
+点击“PDF 定位测试（画框）”后，会在 output/itr_autofill/test 文件夹中生成带标记的测试 PDF：
 - 蓝框：识别到的 Page 区域/页码区域（用于辅助检查拆分/定位）
 - 红框：识别到的可填写空白区域（最终会在这里写入内容）
 你也可以点击“打开测试文件夹”快速查看结果。
@@ -1391,8 +1416,10 @@ ITR PDF 自动预填工具 —— 使用说明
 
         out_pdf, _logs = pdf_position_test(pdf, preset, fields)
         if out_pdf:
-            messagebox.showinfo("完成",
-                                f"已生成测试PDF（蓝框label 红框cell）：\n{os.path.basename(out_pdf)}\n目录：pdf_test/")
+            messagebox.showinfo(
+                "完成",
+                f"已生成测试PDF（蓝框label 红框cell）：\n{os.path.basename(out_pdf)}\n目录：output/itr_autofill/test/"
+            )
         else:
             messagebox.showerror("错误", "测试失败")
 
@@ -1769,11 +1796,12 @@ ITR PDF 自动预填工具 —— 使用说明
         self.update_idletasks()
 
         # start thread
-        self._export_thread = threading.Thread(target=self._export_worker, args=(preset,), daemon=True)
+        batch = batch_id()
+        self._export_thread = threading.Thread(target=self._export_worker, args=(preset, batch), daemon=True)
         self._export_thread.start()
         self.after(120, self._poll_queue)
 
-    def _export_worker(self, preset: dict):
+    def _export_worker(self, preset: dict, batch: str):
         try:
             # 分组：按 PDF 文件名
             by_pdf: Dict[str, List[ITRItem]] = {}
@@ -1783,6 +1811,8 @@ ITR PDF 自动预填工具 —— 使用说明
             total_pdfs = len(self.pdf_paths)
             done = 0
             out_pdfs = []
+            filled_dir = ensure_output_batch_dir("filled", batch)
+            report_dir = ensure_report_batch_dir(batch)
 
             for pdf_path in self.pdf_paths:
                 pdf_name = os.path.basename(pdf_path)
@@ -1799,7 +1829,7 @@ ITR PDF 自动预填工具 —— 使用说明
                     write_one_itr(doc, it.set_start_page_1based, preset, it.filled, cache)
 
                 out_name = os.path.splitext(pdf_name)[0] + "_filled.pdf"
-                out_path = os.path.join(OUTPUT_DIR, out_name)
+                out_path = os.path.join(filled_dir, out_name)
                 doc.save(out_path)
                 doc.close()
                 out_pdfs.append(out_path)
@@ -1807,8 +1837,8 @@ ITR PDF 自动预填工具 —— 使用说明
                 done += 1
                 self._q.put(("progress", done, total_pdfs, f"完成：{pdf_name}"))
 
-            report_path = self._save_report(preset)
-            self._q.put(("done", len(out_pdfs), os.path.basename(report_path)))
+            report_path = self._save_report(preset, report_dir)
+            self._q.put(("done", len(out_pdfs), report_path, filled_dir, report_dir))
 
         except Exception as e:
             self._q.put(("error", str(e)))
@@ -1824,12 +1854,15 @@ ITR PDF 自动预填工具 —— 使用说明
                     self.export_progress["value"] = done
                     self.status.config(text=f"{text}  ({done}/{total})")
                 elif kind == "done":
-                    pdf_count, report_name = msg[1], msg[2]
+                    pdf_count, report_path, filled_dir, report_dir = msg[1], msg[2], msg[3], msg[4]
                     self.status.config(text="导出完成")
                     self.btn_export.config(state="normal")
                     self.btn_save_edits.config(state="normal")
                     self._update_main_preset_status()  # parse按钮状态恢复
-                    messagebox.showinfo("完成", f"输出PDF：{pdf_count}\n报告：{report_name}\n目录：output/")
+                    messagebox.showinfo(
+                        "完成",
+                        f"输出PDF：{pdf_count}\n填充目录：{filled_dir}\n报告：{report_path}\n报告目录：{report_dir}"
+                    )
                     return
                 elif kind == "error":
                     err = msg[1]
@@ -1850,8 +1883,8 @@ ITR PDF 自动预填工具 —— 使用说明
             self.btn_save_edits.config(state="normal")
             self._update_main_preset_status()
 
-    def _save_report(self, preset: dict) -> str:
-        out_path = os.path.join(OUTPUT_DIR, "report.xlsx")
+    def _save_report(self, preset: dict, report_dir: str) -> str:
+        out_path = os.path.join(report_dir, "report.xlsx")
         fields_order = [f.get("name", "") for f in preset.get("fields", []) if f.get("name")]
         rows = []
         for it in self.items:
