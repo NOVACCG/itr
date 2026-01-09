@@ -6,7 +6,7 @@ NA 自动勾选模块（Tab 正式版 UI）- v3.5（支持批量导入PDF + NA�
 本版新增：
 - ✅ 方案A：一次选择多个 PDF 批量导入（askopenfilenames）
 - ✅ 必须先【解析】（对选中PDF或全部PDF），解析成功后【测试/打勾】才可用（强制流程）
-- ✅ 测试输出目录：output/na_auto/test/<batch>
+- ✅ 测试输出目录：output/na_check/test/<batch>
 - ✅ 测试PDF命名：原文件名 + "_test_boxes.pdf"
 - ✅ “测试PDF显示标注字”开关：给每个框都写小字标注（可开关）
 
@@ -31,14 +31,20 @@ import fitz  # PyMuPDF
 # -------------------------
 # 输出目录（统一 output/，按模块/输出类型/批次）
 # output/
-#   na_auto/
+#   na_check/
 #     filled/<batch>/
 #     test/<batch>/
-#     report/<batch>/
+#
+# 报告目录（统一 report/，按模块/批次）
+# report/
+#   ex_check/
+#     <batch>/
 # -------------------------
 BASE_DIR = Path(__file__).resolve().parent
 OUTPUT_ROOT = BASE_DIR / "output"
-MODULE_NAME = "na_auto"
+REPORT_ROOT = BASE_DIR / "report"
+MODULE_NAME = "na_check"
+REPORT_MODULE_NAME = "ex_check"
 
 
 def norm_text(s: str) -> str:
@@ -187,7 +193,7 @@ def rect_between_lines(x0, x1, y0, y1, pad=0.6):
 def _unique_sorted_x_from_verticals(verticals) -> list[float]:
     """从竖线集合里提取去重后的 x 坐标（排序）。
 
-    verticals 可能是:
+    verticals 可是:
     - (x, y0, y1)  由 extract_rulings() 生成
     - (x0, y0, x1, y1)  兼容旧写法/外部传入
     本函数只关心 x 坐标。
@@ -678,11 +684,19 @@ class NAChkTab(ttk.Frame):
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def _report_root(self) -> Path:
+        path = REPORT_ROOT / REPORT_MODULE_NAME
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
     def _batch_id(self) -> str:
         return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     def _batch_dir(self, output_type: str, batch_id: str) -> Path:
-        path = self._module_root() / output_type / batch_id
+        if output_type == "report":
+            path = self._report_root() / batch_id
+        else:
+            path = self._module_root() / output_type / batch_id
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -749,7 +763,7 @@ class NAChkTab(ttk.Frame):
         self._log(f"已批量导入 PDF：{len(self.pdf_paths)} 个")
         for p in self.pdf_paths:
             self._log(f"  - {p}")
-        self._log("请先点击【解析】（对选中PDF或全部PDF）再进行测试/打勾。")
+        self._log("请先点击【解析】（对选中PDF或全部PDF）再进行试/打勾。")
 
         self._update_status()
         self._apply_state()
